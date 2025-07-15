@@ -1,0 +1,41 @@
+﻿@{
+    ViewBag.Title = "Login";
+}
+
+<div class="d-flex justify-content-center align-items-center vh-100 bg-light">
+    <div class="card shadow p-4" style="min-width: 350px;">
+        <div class="text-center mb-3">
+            <h3 class="mt-2">LogiTrack</h3>
+            <p class="text-muted">Delivery Management System</p>
+        </div>
+
+        <h5 class="text-center mb-3">Login to Your Account</h5>
+
+        <form method="post" asp-action="Login">
+
+            <div class="btn-group w-100 mb-3" role="group">
+                <input type="radio" class="btn-check" name="role" id="adminRole" value="Admin" checked>
+                <label class="btn btn-outline-primary" for="adminRole">Admin</label>
+
+                <input type="radio" class="btn-check" name="role" id="driverRole" value="Driver">
+                <label class="btn btn-outline-primary" for="driverRole">Driver</label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-control" placeholder="Enter username" required />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Enter password" required />
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+
+        <div class="alert alert-danger mt-3 d-none" id="errorMsg">Invalid credentials. Please try again.</div>
+    </div>
+</div>
+
+

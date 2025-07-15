@@ -1,0 +1,109 @@
+﻿@model List<LogisticsScheduler.Web.ViewModels.DriverReportViewModel>
+@{
+    ViewBag.Title = "Driver Performance Reports";
+
+    int totalDrivers = Model.Count;
+    int totalJobs = Model.Sum(d => d.TotalJobs);
+    double avgPerformance = Model.Count > 0 ? Model.Average(d => (d.AverageTimeliness + d.AverageProductCondition + d.AverageStaffBehaviour) / 3) : 0;
+    var topPerformer = Model
+        .OrderByDescending(d => (d.AverageTimeliness + d.AverageProductCondition + d.AverageStaffBehaviour) / 3)
+        .FirstOrDefault()?.DriverName ?? "N/A";
+}
+
+<div class="container mt-4">
+    <div class="d-flex align-items-center mb-4">
+        <a href="@Url.Action("Dashboard", "Admin")" class="text-decoration-none me-3">
+            <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+        </a>
+        <h2><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Driver Reports</h2>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-primary">@totalDrivers</h4>
+                <p class="text-muted mb-0">Active drivers</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-primary">@totalJobs</h4>
+                <p class="text-muted mb-0">Completed deliveries</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-success">@avgPerformance.ToString("0.0")</h4>
+                <p class="text-muted mb-0">Overall rating</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h5 class="text-warning mb-1">@topPerformer</h5>
+                <p class="text-muted mb-0">Highest rated driver</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm p-4">
+        <h4 class="mb-3"><i class="bi bi-star me-2"></i>Driver Performance Reports</h4>
+        <p class="text-muted mb-4">Detailed performance metrics for all drivers based on customer feedback</p>
+
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Driver</th>
+                        <th>Total Jobs</th>
+                        <th>Avg. Timeliness</th>
+                        <th>Avg. Product Condition</th>
+                        <th>Avg. Staff Behaviour</th>
+                        <th>Overall Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var driver in Model)
+                    {
+                        var overallRating = (driver.AverageTimeliness + driver.AverageProductCondition + driver.AverageStaffBehaviour) / 3;
+
+                        <tr>
+                            <td>@driver.DriverName</td>
+                            <td><span class="badge bg-light text-dark">@driver.TotalJobs</span></td>
+                            <td>
+                                <span class="badge @(GetRatingClass(driver.AverageTimeliness))">@driver.AverageTimeliness.ToString("0.0")</span>
+                            </td>
+                            <td>
+                                <span class="badge @(GetRatingClass(driver.AverageProductCondition))">@driver.AverageProductCondition.ToString("0.0")</span>
+                            </td>
+                            <td>
+                                <span class="badge @(GetRatingClass(driver.AverageStaffBehaviour))">@driver.AverageStaffBehaviour.ToString("0.0")</span>
+                            </td>
+                            <td>
+                                <span class="badge @(GetRatingClass(overallRating))">@overallRating.ToString("0.0")</span>
+                                <i class="bi bi-star-fill text-warning ms-1"></i>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@functions {
+    public string GetRatingClass(double rating)
+    {
+        if (rating >= 4.5)
+        {
+            return "bg-success";
+        }
+        else if (rating >= 4.0)
+        {
+            return "bg-warning text-dark";
+        }
+        else
+        {
+            return "bg-danger";
+        }
+    }
+}

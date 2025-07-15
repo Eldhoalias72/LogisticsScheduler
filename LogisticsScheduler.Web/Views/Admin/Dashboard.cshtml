@@ -1,0 +1,89 @@
+﻿@{
+    ViewBag.Title = "Admin Dashboard";
+    Layout = "_Layout"; 
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="display-5 fw-bold mb-2">Welcome back, Admin </h1>
+        <p class="lead text-muted">Manage your delivery operations efficiently</p>
+    </div>
+    <div>
+        <a href="/login" class="btn btn-outline-danger">
+            <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-lg-3">
+        <div class="card border-primary shadow-sm h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-person-plus-fill fs-1 text-primary mb-2"></i>
+                <h5>Add Driver</h5>
+                <p class="text-muted small">Register new drivers to your fleet</p>
+                <a asp-controller="Admin" asp-action="AddDriver" class="btn btn-outline-primary w-100">Go</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card border-success shadow-sm h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-calendar-plus-fill fs-1 text-success mb-2"></i>
+                <h5>Assign Job</h5>
+                <p class="text-muted small">Create and assign delivery tasks</p>
+                <a asp-controller="Job" asp-action="Assign" class="btn btn-outline-success w-100">Go</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card border-warning shadow-sm h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-journal-text fs-1 text-warning mb-2"></i>
+                <h5>Scheduled Jobs</h5>
+                <p class="text-muted small">Track job status and progress</p>
+                <a asp-controller="Job" asp-action="Schedule" class="btn btn-outline-warning w-100">Go</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card border-info shadow-sm h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-bar-chart-fill fs-1 text-info mb-2"></i>
+                <h5>Driver Reports</h5>
+                <p class="text-muted small">Performance metrics and ratings</p>
+                <a asp-controller="Reports" asp-action="Index" class="btn btn-outline-info w-100">Go</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6 col-lg-6">
+        <div class="card border-0 shadow-sm text-center p-4">
+            <h6 class="text-muted">Total Drivers</h6>
+            <h3 class="text-primary">@ViewBag.TotalDrivers</h3>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-6">
+        <div class="card border-0 shadow-sm text-center p-4">
+            <h6 class="text-muted">Active Jobs</h6>
+            <h3 class="text-success">@ViewBag.ActiveJobs</h3>
+        </div>
+    </div>
+</div>
+
+<style>
+    .bg-purple {
+        background-color: #e6e0ff;
+    }
+
+    .text-purple {
+        color: #6f42c1;
+    }
+
+    .lead {
+        font-size: 1.25rem;
+        font-weight: 300;
+    }
+</style>

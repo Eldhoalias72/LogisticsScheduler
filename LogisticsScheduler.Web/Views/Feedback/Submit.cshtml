@@ -1,0 +1,128 @@
+﻿@model LogisticsScheduler.Data.Models.Feedback
+@{
+    ViewBag.Title = "Delivery Feedback";
+    var jobId = ViewBag.JobId;
+}
+
+<div class="container mt-5 d-flex justify-content-center">
+    <div class="card shadow-sm p-4" style="max-width: 600px; width: 100%;">
+        <h3 class="mb-2">Rate Your Delivery Experience</h3>
+        <p class="text-muted mb-4">Your feedback helps us maintain high service standards</p>
+
+        <form method="post" asp-action="Submit" id="feedbackForm">
+            <input type="hidden" name="JobId" value="@jobId" />
+
+            <div class="mb-3">
+                <label class="form-label">Timeliness (1 - 5)</label>
+                <div class="star-rating" data-target="Timeliness"></div>
+                <input type="number" name="Timeliness" min="1" max="5" class="form-control d-none" required id="Timeliness" />
+                <small class="text-muted">How punctual was the delivery?</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Product Condition (1 - 5)</label>
+                <div class="star-rating" data-target="ProductCondition"></div>
+                <input type="number" name="ProductCondition" min="1" max="5" class="form-control d-none" required id="ProductCondition" />
+                <small class="text-muted">How was the condition of your delivered items?</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Staff Behaviour (1 - 5)</label>
+                <div class="star-rating" data-target="StaffBehaviour"></div>
+                <input type="number" name="StaffBehaviour" min="1" max="5" class="form-control d-none" required id="StaffBehaviour" />
+                <small class="text-muted">How professional and courteous was our delivery staff?</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Additional Comments</label>
+                <textarea name="Comments" class="form-control" rows="3" placeholder="Share any additional feedback or suggestions..."></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning flex-grow-1">Submit Feedback</button>
+                <button type="button" class="btn btn-outline-secondary" id="clearForm">Clear Form</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<div class="container mt-4 d-flex justify-content-center">
+    <div class="card p-3 shadow-sm" style="max-width: 600px; width: 100%;">
+        <h5 class="mb-3">Rating Guide</h5>
+        <div class="row">
+            <div class="col-4">
+                <strong>Timeliness</strong>
+                <ul class="list-unstyled small">
+                    <li>5★ - Early or exactly on time</li>
+                    <li>4★ - Within 15 minutes</li>
+                    <li>3★ - Within 30 minutes</li>
+                    <li>2★ - Within 1 hour</li>
+                    <li>1★ - More than 1 hour late</li>
+                </ul>
+            </div>
+            <div class="col-4">
+                <strong>Product Condition</strong>
+                <ul class="list-unstyled small">
+                    <li>5★ - Perfect condition</li>
+                    <li>4★ - Very good condition</li>
+                    <li>3★ - Good condition</li>
+                    <li>2★ - Minor damage</li>
+                    <li>1★ - Significant damage</li>
+                </ul>
+            </div>
+            <div class="col-4">
+                <strong>Staff Behaviour</strong>
+                <ul class="list-unstyled small">
+                    <li>5★ - Exceptional service</li>
+                    <li>4★ - Very professional</li>
+                    <li>3★ - Professional</li>
+                    <li>2★ - Adequate</li>
+                    <li>1★ - Unprofessional</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.star-rating').forEach(function (container) {
+            const targetId = container.dataset.target;
+            const hiddenInput = document.getElementById(targetId);
+
+            for (let i = 1; i <= 5; i++) {
+                const star = document.createElement('i');
+                star.classList.add('bi', 'bi-star', 'fs-4', 'me-1', 'text-warning');
+                star.style.cursor = 'pointer';
+                star.dataset.value = i;
+
+                star.addEventListener('click', function () {
+                    hiddenInput.value = i;
+                    Array.from(container.children).forEach(s => {
+                        s.classList.remove('bi-star-fill');
+                        s.classList.add('bi-star');
+                    });
+                    for (let j = 0; j < i; j++) {
+                        container.children[j].classList.remove('bi-star');
+                        container.children[j].classList.add('bi-star-fill');
+                    }
+                });
+
+                container.appendChild(star);
+            }
+        });
+
+        document.getElementById("clearForm").addEventListener("click", function () {
+            const form = document.getElementById("feedbackForm");
+            form.reset();
+
+            document.querySelectorAll('.star-rating').forEach(function (container) {
+                Array.from(container.children).forEach(star => {
+                    star.classList.remove('bi-star-fill');
+                    star.classList.add('bi-star');
+                });
+            });
+        });
+    </script>
+}

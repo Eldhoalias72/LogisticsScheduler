@@ -1,0 +1,116 @@
+﻿@model List<LogisticsScheduler.Data.Models.Job>
+@{
+    ViewBag.Title = "Driver Dashboard";
+    var driverId = ViewBag.DriverId;
+
+    int totalJobs = Model.Count;
+    int completedJobs = Model.Count(j => j.Status == "Completed");
+    int inProgressJobs = Model.Count(j => j.Status == "In Progress");
+    int pendingJobs = Model.Count(j => j.Status == "Pending");
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-truck me-2 text-warning"></i>Driver Dashboard</h2>
+        <a href="@Url.Action("Login")" class="btn btn-outline-dark">
+            <i class="bi bi-box-arrow-right me-1"></i> Logout
+        </a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-warning">@totalJobs</h4>
+                <p class="text-muted mb-0">Assigned deliveries</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-success">@completedJobs</h4>
+                <p class="text-muted mb-0">Finished today</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-primary">@inProgressJobs</h4>
+                <p class="text-muted mb-0">Currently active</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3 text-center">
+                <h4 class="text-warning">@pendingJobs</h4>
+                <p class="text-muted mb-0">Awaiting start</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm p-4">
+        <h4 class="mb-3"><i class="bi bi-geo-alt me-2"></i>My Delivery Jobs</h4>
+        <p class="text-muted mb-4">Manage your assigned deliveries and update their status</p>
+
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Delivery Address</th>
+                        <th>Scheduled Time</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Update Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in Model)
+                    {
+                        <tr>
+                            <td><strong>@job.JobId</strong></td>
+                            <td><i class="bi bi-geo-alt-fill text-primary me-1"></i>@job.DeliveryAddress</td>
+                            <td><i class="bi bi-clock me-1"></i>@job.ScheduledTime</td>
+                            <td>
+                                @if (job.Status == "Pending")
+                                {
+                                    <span class="badge bg-secondary">Pending</span>
+                                }
+                                else if (job.Status == "In Progress")
+                                {
+                                    <span class="badge bg-primary">In Progress</span>
+                                }
+                                else if (job.Status == "Completed")
+                                {
+                                    <span class="badge bg-success">Completed</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-dark">@job.Status</span>
+                                }
+                            </td>
+                            <td>
+                                @if (job.Priority >= 4)
+                                {
+                                    <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>@job.Priority</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">@job.Priority</span>
+                                }
+                            </td>
+                            <td>
+                                <form asp-action="UpdateStatus" method="post" class="d-flex gap-2">
+                                    <input type="hidden" name="jobId" value="@job.JobId" />
+                                    <select name="status" class="form-select form-select-sm" required>
+                                        <option value="">Select</option>
+                                        <option value="Picked Up">Picked Up</option>
+                                        <option value="In Transit">In Transit</option>
+                                        <option value="Delivered">Delivered</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">Update</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
