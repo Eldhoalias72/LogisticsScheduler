@@ -1,45 +1,46 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using LogisticsScheduler.Data;
 using LogisticsScheduler.Web.ViewModels;
 using Microsoft.AspNetCore.Authorization;
+using System.Net.Http;
+using System.Net.Http.Json;
+using Microsoft.Extensions.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace LogisticsScheduler.Web.Controllers
 {
     [Authorize(Roles = "Admin")]
     public class ReportsController : Controller
     {
-        private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly string _apiBaseUrl;
 
-        public ReportsController(AppDbContext context)
+        // REFACTORED: Inject IHttpClientFactory, not AppDbContext
+        public ReportsController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _context = context;
+            _httpClientFactory = httpClientFactory;
+            _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
         public async Task<IActionResult> Index()
         {
-            var drivers = await _context.Drivers.ToListAsync();
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(_apiBaseUrl);
 
             var report = new List<DriverReportViewModel>();
 
-            foreach (var driver in drivers)
+            // Call the new API endpoint
+            var response = await client.GetAsync("api/reports/driver-performance");
+
+            if (response.IsSuccessStatusCode)
             {
-                var jobs = await _context.Jobs.Where(j => j.DriverId == driver.DriverId).ToListAsync();
-                var jobIds = jobs.Select(j => j.JobId).ToList();
-
-                var feedbacks = await _context.Feedbacks.Where(f => jobIds.Contains(f.JobId)).ToListAsync();
-
-                var reportItem = new DriverReportViewModel
-                {
-                    DriverId = driver.DriverId,
-                    DriverName = driver.Name,
-                    TotalJobs = jobs.Count,
-                    AverageTimeliness = feedbacks.Any() ? feedbacks.Average(f => f.Timeliness) : 0,
-                    AverageProductCondition = feedbacks.Any() ? feedbacks.Average(f => f.ProductCondition) : 0,
-                    AverageStaffBehaviour = feedbacks.Any() ? feedbacks.Average(f => f.StaffBehaviour) : 0
-                };
-
-                report.Add(reportItem);
+                // Deserialize directly into the ViewModel, as the structure matches the DTO
+                report = await response.Content.ReadFromJsonAsync<List<DriverReportViewModel>>();
+            }
+            else
+            {
+                ModelState.AddModelError(string.Empty, "An error occurred while fetching reports.");
             }
 
             return View(report);

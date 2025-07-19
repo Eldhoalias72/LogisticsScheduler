@@ -17,14 +17,21 @@ namespace LogisticsScheduler.API.Controllers
             _context = context;
         }
 
+        // GET: api/jobs
+        // GET: api/jobs?date=2025-07-20
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Job>>> GetAllJobs()
+        public async Task<ActionResult<IEnumerable<Job>>> GetJobs([FromQuery] DateTime? date)
         {
-            return await _context.Jobs
+            var jobsQuery = _context.Jobs
                 .Include(j => j.Driver)
-                .Include(j => j.JobStatuses)
-                .Include(j => j.Feedback)
-                .ToListAsync();
+                .AsQueryable();
+
+            if (date.HasValue)
+            {
+                jobsQuery = jobsQuery.Where(j => j.ScheduledTime.Date == date.Value.Date);
+            }
+
+            return await jobsQuery.OrderByDescending(j => j.ScheduledTime).ToListAsync();
         }
 
         [HttpGet("{id}")]
@@ -32,8 +39,6 @@ namespace LogisticsScheduler.API.Controllers
         {
             var job = await _context.Jobs
                 .Include(j => j.Driver)
-                .Include(j => j.JobStatuses)
-                .Include(j => j.Feedback)
                 .FirstOrDefaultAsync(j => j.JobId == id);
 
             if (job == null)
@@ -45,12 +50,17 @@ namespace LogisticsScheduler.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Job>> CreateJob(JobCreateDto dto)
         {
+            if (dto.DriverId.HasValue && !await _context.Drivers.AnyAsync(d => d.DriverId == dto.DriverId.Value))
+            {
+                return BadRequest("Invalid DriverId.");
+            }
+
             var job = new Job
             {
                 DriverId = dto.DriverId,
                 DeliveryAddress = dto.DeliveryAddress,
                 Priority = dto.Priority,
-                Status = dto.Status,
+                Status = dto.DriverId.HasValue ? "Assigned" : "Scheduled",
                 ScheduledTime = dto.ScheduledTime
             };
 
@@ -59,6 +69,47 @@ namespace LogisticsScheduler.API.Controllers
             return CreatedAtAction(nameof(GetJobById), new { id = job.JobId }, job);
         }
 
+        [HttpPost("{id}/auto-assign")]
+        public async Task<IActionResult> AutoAssignJob(int id)
+        {
+            var job = await _context.Jobs.FindAsync(id);
+            if (job == null) return NotFound("Job not found.");
+
+            if (job.DriverId.HasValue) return BadRequest("Job is already assigned.");
+
+            var suitableDriver = await _context.Drivers
+                .Where(d => d.IsAvailable)
+                .OrderBy(d => CalculateDistance(d.Location, job.DeliveryAddress))
+                .FirstOrDefaultAsync();
+
+            if (suitableDriver != null)
+            {
+                job.DriverId = suitableDriver.DriverId;
+                job.Status = "Assigned";
+                _context.Update(job);
+                await _context.SaveChangesAsync();
+                return Ok(job);
+            }
+
+            return NotFound("No suitable drivers available.");
+        }
+
+        [HttpPut("{jobId}/reassign/{driverId}")]
+        public async Task<IActionResult> ReassignJob(int jobId, int driverId)
+        {
+            var job = await _context.Jobs.FindAsync(jobId);
+            if (job == null) return NotFound("Job not found.");
+
+            var driverExists = await _context.Drivers.AnyAsync(d => d.DriverId == driverId);
+            if (!driverExists) return BadRequest("Driver not found.");
+
+            job.DriverId = driverId;
+            job.Status = "Assigned";
+            _context.Update(job);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
 
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateJobStatus(int id, [FromBody] string status)
@@ -73,7 +124,7 @@ namespace LogisticsScheduler.API.Controllers
             {
                 JobId = job.JobId,
                 Status = status,
-                TimeStamp = DateTime.Now
+                TimeStamp = DateTime.UtcNow
             };
 
             _context.JobStatuses.Add(statusLog);
@@ -93,6 +144,15 @@ namespace LogisticsScheduler.API.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        private double CalculateDistance(string origin, string destination)
+        {
+            if (string.IsNullOrEmpty(origin) || string.IsNullOrEmpty(destination))
+            {
+                return double.MaxValue;
+            }
+            return new Random().NextDouble() * 10;
         }
     }
 }

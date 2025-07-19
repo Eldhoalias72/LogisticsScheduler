@@ -1,16 +1,20 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using LogisticsScheduler.Data;
-using LogisticsScheduler.Data.Models;
+﻿using LogisticsScheduler.API.DTOs;
+using Microsoft.AspNetCore.Mvc;
+using System.Net.Http;
+using System.Net.Http.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace LogisticsScheduler.Web.Controllers
 {
     public class FeedbackController : Controller
     {
-        private readonly AppDbContext _context;
+        private readonly HttpClient _httpClient;
+        private readonly string _apiBaseUrl;
 
-        public FeedbackController(AppDbContext context)
+        public FeedbackController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _context = context;
+            _httpClient = httpClientFactory.CreateClient();
+            _apiBaseUrl = configuration["ApiBaseUrl"];
         }
 
         [HttpGet]
@@ -21,19 +25,25 @@ namespace LogisticsScheduler.Web.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Submit([Bind("JobId,Timeliness,ProductCondition,StaffBehaviour,Comments")] Feedback feedback)
+        public async Task<IActionResult> Submit([Bind("JobId,Timeliness,ProductCondition,StaffBehaviour,Comments")] FeedbackCreateDto feedbackDto)
         {
-            if (ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                _context.Feedbacks.Add(feedback);
-                await _context.SaveChangesAsync();
+                ViewBag.JobId = feedbackDto.JobId;
+                return View(feedbackDto);
+            }
+
+            var response = await _httpClient.PostAsJsonAsync($"{_apiBaseUrl}/api/feedback", feedbackDto);
+
+            if (response.IsSuccessStatusCode)
+            {
                 return RedirectToAction("ThankYou");
             }
 
-            ViewBag.JobId = feedback.JobId;
-            return View(feedback);
+            ModelState.AddModelError("", "Failed to submit feedback.");
+            ViewBag.JobId = feedbackDto.JobId;
+            return View(feedbackDto);
         }
-
 
         public IActionResult ThankYou()
         {

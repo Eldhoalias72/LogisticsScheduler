@@ -1,117 +1,132 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using LogisticsScheduler.Data;
-using LogisticsScheduler.Data.Models;
-using System.Linq;
+using LogisticsScheduler.Data.Models; // Reference is OK for models, but not for DbContext
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System;
+using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 
 namespace LogisticsScheduler.Web.Controllers
 {
     [Authorize(Roles = "Admin")]
     public class JobController : Controller
     {
-        private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly string _apiBaseUrl;
 
-        public JobController(AppDbContext context)
+        public JobController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _context = context;
+            _httpClientFactory = httpClientFactory;
+            _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        // Schedule view with calendar/timeline
+        private HttpClient GetClient()
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(_apiBaseUrl);
+            return client;
+        }
+
         public async Task<IActionResult> Schedule(DateTime? date)
         {
-            var jobsQuery = _context.Jobs
-                .Include(j => j.Driver)
-                .AsQueryable();
+            var client = GetClient();
+            string requestUri = "api/jobs";
 
             if (date.HasValue)
             {
-                jobsQuery = jobsQuery.Where(j => j.ScheduledTime.Date == date.Value.Date);
+                requestUri += $"?date={date.Value:yyyy-MM-dd}";
                 ViewBag.SelectedDate = date.Value;
             }
-            else
-            {
-                ViewBag.SelectedDate = null;
-            }
 
-            var jobs = await jobsQuery.ToListAsync();
-            ViewBag.Drivers = await _context.Drivers.Where(d => d.IsAvailable).ToListAsync();
+            var jobsResponse = await client.GetAsync(requestUri);
+            var jobs = jobsResponse.IsSuccessStatusCode
+                ? await jobsResponse.Content.ReadFromJsonAsync<List<Job>>()
+                : new List<Job>();
+
+            // Get available Drivers from API (assuming a DriversController exists in API)
+            var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
+            ViewBag.Drivers = driversResponse.IsSuccessStatusCode
+                ? await driversResponse.Content.ReadFromJsonAsync<List<Driver>>()
+                : new List<Driver>();
 
             return View(jobs);
         }
 
-
-
-        // Manual job assignment
         [HttpGet]
         public async Task<IActionResult> Assign()
         {
-            ViewBag.Drivers = await _context.Drivers.Where(d => d.IsAvailable).ToListAsync();
-            return View(new Job { Status = "Scheduled" });
+            var client = GetClient();
+            var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
+
+            ViewBag.Drivers = driversResponse.IsSuccessStatusCode
+                ? await driversResponse.Content.ReadFromJsonAsync<List<Driver>>()
+                : new List<Driver>();
+
+            return View(new Job());
         }
 
-
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Assign(Job job)
         {
-            if (ModelState.IsValid)
+            // Create the DTO that the API expects
+            var jobCreateDto = new
             {
-                _context.Jobs.Add(job);
-                await _context.SaveChangesAsync();
+                DriverId = job.DriverId == 0 ? (int?)null : job.DriverId,
+                job.DeliveryAddress,
+                job.Priority,
+                job.Status,
+                job.ScheduledTime
+            };
+
+            var client = GetClient();
+            var response = await client.PostAsJsonAsync("api/jobs", jobCreateDto);
+
+            if (response.IsSuccessStatusCode)
+            {
                 return RedirectToAction("Schedule");
             }
 
-            ViewBag.Drivers = await _context.Drivers
-                .Where(d => d.IsAvailable)
-                .ToListAsync();
+            ModelState.AddModelError(string.Empty, "An error occurred while creating the job.");
+            var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
+            ViewBag.Drivers = driversResponse.IsSuccessStatusCode
+                ? await driversResponse.Content.ReadFromJsonAsync<List<Driver>>()
+                : new List<Driver>();
 
             return View(job);
         }
 
-        // Auto-assign jobs based on criteria
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> AutoAssign(int jobId)
         {
-            var job = await _context.Jobs.FindAsync(jobId);
-            if (job == null) return NotFound();
+            var client = GetClient();
+            var response = await client.PostAsync($"api/jobs/{jobId}/auto-assign", null);
 
-            // Find best driver based on proximity, availability, and capacity
-            var suitableDrivers = await _context.Drivers
-                .Where(d => d.IsAvailable)
-                .OrderBy(d => CalculateDistance(d.Location, job.DeliveryAddress)) // Simplified
-                .ToListAsync();
-
-            if (suitableDrivers.Any())
+            if (!response.IsSuccessStatusCode)
             {
-                job.DriverId = suitableDrivers.First().DriverId;
-                job.Status = "Assigned";
-                _context.Update(job);
-                await _context.SaveChangesAsync();
+                TempData["ErrorMessage"] = "Failed to auto-assign job. No suitable drivers may be available.";
             }
 
             return RedirectToAction("Schedule");
         }
 
-        // Job reassignment
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Reassign(int jobId, int driverId)
         {
-            var job = await _context.Jobs.FindAsync(jobId);
-            if (job == null) return NotFound();
+            var client = GetClient();
+            // Use PUT as defined in the API for reassigning
+            var response = await client.PutAsync($"api/jobs/{jobId}/reassign/{driverId}", null);
 
-            job.DriverId = driverId;
-            _context.Update(job);
-            await _context.SaveChangesAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                TempData["ErrorMessage"] = "Failed to reassign job.";
+            }
 
             return RedirectToAction("Schedule");
-        }
-
-        // Simplified distance calculation (replace with Google Maps API)
-        private double CalculateDistance(string origin, string destination)
-        {
-            // This is a placeholder - implement actual Google Maps API integration
-            return new Random().NextDouble() * 10;
         }
     }
 }

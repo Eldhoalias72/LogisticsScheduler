@@ -13,17 +13,18 @@
 <div class="card shadow-sm p-4">
     <h4 class="mb-3">🚚 Delivery Job Details</h4>
     <form method="post" asp-action="Assign" onsubmit="combineDateTime()">
+        @Html.AntiForgeryToken() @* Add this for security *@
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
         <div class="mb-3">
-            <label class="form-label">Delivery Address *</label>
-            <input type="text" name="DeliveryAddress" class="form-control" placeholder="Enter complete delivery address..." required />
+            <label class="form-label" asp-for="DeliveryAddress">Delivery Address *</label>
+            <input type="text" asp-for="DeliveryAddress" class="form-control" placeholder="Enter complete delivery address..." required />
         </div>
-
 
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Priority Level *</label>
-                <select name="Priority" class="form-select" required>
+                <label class="form-label" asp-for="Priority">Priority Level *</label>
+                <select asp-for="Priority" class="form-select" required>
                     <option value="5">5 - Urgent</option>
                     <option value="4">4 - High</option>
                     <option value="3" selected>3 - Normal</option>
@@ -43,21 +44,15 @@
                 <input type="time" id="ScheduledTimeOnly" class="form-control" required />
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">Assign Driver (Optional)</label>
-                <select name="DriverId" class="form-select">
+                <label class="form-label" asp-for="DriverId">Assign Driver (Optional)</label>
+                <select asp-for="DriverId" class="form-select" asp-items='new SelectList(ViewBag.Drivers, "DriverId", "Name")'>
                     <option value="">Unassigned</option>
-                    @foreach (var driver in ViewBag.Drivers)
-                    {
-                        <option value="@driver.DriverId">@driver.Name</option>
-                    }
                 </select>
             </div>
         </div>
 
-
-        <input type="hidden" id="ScheduledTimeFinal" name="ScheduledTime" />
-
-        <input type="hidden" name="Status" value="Scheduled" />
+        <input type="hidden" asp-for="ScheduledTime" id="ScheduledTimeFinal" />
+        <input type="hidden" asp-for="Status" value="Scheduled" />
 
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-success">
@@ -68,14 +63,16 @@
     </form>
 </div>
 
-<script>
-    function combineDateTime() {
-        const date = document.getElementById('ScheduledDate').value;
-        const time = document.getElementById('ScheduledTimeOnly').value;
+@section Scripts {
+    <script>
+        function combineDateTime() {
+            const date = document.getElementById('ScheduledDate').value;
+            const time = document.getElementById('ScheduledTimeOnly').value;
 
-        if (date && time) {
-            const combined = date + 'T' + time;
-            document.getElementById('ScheduledTimeFinal').value = combined;
+            if (date && time) {
+                const combined = date + 'T' + time;
+                document.getElementById('ScheduledTimeFinal').value = combined;
+            }
         }
-    }
-</script>
+    </script>
+}

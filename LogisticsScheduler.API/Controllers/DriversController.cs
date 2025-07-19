@@ -3,6 +3,7 @@ using LogisticsScheduler.Data;
 using LogisticsScheduler.Data.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using BCrypt.Net;
 
 namespace LogisticsScheduler.API.Controllers
 {
@@ -17,10 +18,18 @@ namespace LogisticsScheduler.API.Controllers
             _context = context;
         }
 
+        // CORRECTED: This single method handles both "api/drivers" and "api/drivers?isAvailable=true"
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Driver>>> GetAllDrivers()
+        public async Task<ActionResult<IEnumerable<Driver>>> GetDrivers([FromQuery] bool? isAvailable)
         {
-            return await _context.Drivers.ToListAsync();
+            var query = _context.Drivers.AsQueryable();
+
+            if (isAvailable.HasValue)
+            {
+                query = query.Where(d => d.IsAvailable == isAvailable.Value);
+            }
+
+            return await query.ToListAsync();
         }
 
         [HttpGet("{id}")]
@@ -32,23 +41,49 @@ namespace LogisticsScheduler.API.Controllers
             return driver;
         }
 
+        // NEW: Endpoint to get all jobs assigned to a specific driver
+        [HttpGet("{driverId}/jobs")]
+        public async Task<ActionResult<IEnumerable<Job>>> GetJobsForDriver(int driverId)
+        {
+            var driverExists = await _context.Drivers.AnyAsync(d => d.DriverId == driverId);
+            if (!driverExists)
+            {
+                return NotFound("Driver not found.");
+            }
+
+            var jobs = await _context.Jobs
+                .Where(j => j.DriverId == driverId)
+                .OrderByDescending(j => j.ScheduledTime)
+                .ToListAsync();
+
+            return Ok(jobs);
+        }
+
+        // In your existing DriversController.cs
+
         [HttpPost]
         public async Task<ActionResult<Driver>> CreateDriver(DriverCreateDto dto)
         {
+            if (await _context.Drivers.AnyAsync(d => d.Username == dto.Username))
+            {
+                return BadRequest(new { message = "Username already exists." });
+            }
+
             var driver = new Driver
             {
                 Name = dto.Name,
                 Location = dto.Location,
                 IsAvailable = dto.IsAvailable,
-                VehicleCapacity = dto.VehicleCapacity
+                VehicleCapacity = dto.VehicleCapacity,
+                Username = dto.Username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password)
             };
 
             _context.Drivers.Add(driver);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetDriverById), new { id = driver.DriverId }, driver);
+            return CreatedAtAction(nameof(GetDriverById), new { id = driver.DriverId }, new { driver.DriverId, driver.Name });
         }
-
 
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateDriver(int id, Driver driver)
