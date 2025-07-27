@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using LogisticsScheduler.Data.Models; // Reference is OK for models, but not for DbContext
+using LogisticsScheduler.Data.Models;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using System.Net.Http;
@@ -45,7 +45,6 @@ namespace LogisticsScheduler.Web.Controllers
                 ? await jobsResponse.Content.ReadFromJsonAsync<List<Job>>()
                 : new List<Job>();
 
-            // Get available Drivers from API (assuming a DriversController exists in API)
             var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
             ViewBag.Drivers = driversResponse.IsSuccessStatusCode
                 ? await driversResponse.Content.ReadFromJsonAsync<List<Driver>>()
@@ -71,14 +70,28 @@ namespace LogisticsScheduler.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Assign(Job job)
         {
-            // Create the DTO that the API expects
+            if (!ModelState.IsValid)
+            {
+                var clientForRepopulate = GetClient();
+                var driversResponseForRepopulate = await clientForRepopulate.GetAsync("api/drivers?isAvailable=true");
+                ViewBag.Drivers = driversResponseForRepopulate.IsSuccessStatusCode
+                    ? await driversResponseForRepopulate.Content.ReadFromJsonAsync<List<Driver>>()
+                    : new List<Driver>();
+                return View(job);
+            }
+
+            // Create the DTO that the API expects, now including the new fields
             var jobCreateDto = new
             {
                 DriverId = job.DriverId == 0 ? (int?)null : job.DriverId,
+                job.PickupAddress,
                 job.DeliveryAddress,
                 job.Priority,
                 job.Status,
-                job.ScheduledTime
+                job.ScheduledTime,
+                job.CustomerName,
+                job.CustomerEmail,
+                job.CustomerNumber
             };
 
             var client = GetClient();
@@ -86,6 +99,7 @@ namespace LogisticsScheduler.Web.Controllers
 
             if (response.IsSuccessStatusCode)
             {
+                TempData["SuccessMessage"] = "New job has been scheduled successfully!";
                 return RedirectToAction("Schedule");
             }
 
@@ -118,7 +132,6 @@ namespace LogisticsScheduler.Web.Controllers
         public async Task<IActionResult> Reassign(int jobId, int driverId)
         {
             var client = GetClient();
-            // Use PUT as defined in the API for reassigning
             var response = await client.PutAsync($"api/jobs/{jobId}/reassign/{driverId}", null);
 
             if (!response.IsSuccessStatusCode)

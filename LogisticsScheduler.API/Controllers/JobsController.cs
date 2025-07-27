@@ -58,10 +58,14 @@ namespace LogisticsScheduler.API.Controllers
             var job = new Job
             {
                 DriverId = dto.DriverId,
+                PickupAddress = dto.PickupAddress,
                 DeliveryAddress = dto.DeliveryAddress,
                 Priority = dto.Priority,
                 Status = dto.DriverId.HasValue ? "Assigned" : "Scheduled",
-                ScheduledTime = dto.ScheduledTime
+                ScheduledTime = dto.ScheduledTime,
+                CustomerName = dto.CustomerName,
+                CustomerEmail = dto.CustomerEmail,
+                CustomerNumber = dto.CustomerNumber
             };
 
             _context.Jobs.Add(job);

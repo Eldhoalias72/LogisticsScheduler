@@ -4,31 +4,29 @@ using System.Security.Claims;
 using System.Net.Http;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
-using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq; // Required for .FirstOrDefault()
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.Extensions.Logging; // Add this using
+using Microsoft.AspNetCore.Http;
+using System.Text.Json.Nodes;
 
+// FIX #1: This helper class was missing. It's needed to read the API response.
 public class LoginResponse
 {
-    public int UserId { get; set; }
-    public string Username { get; set; }
-    public string Role { get; set; }
+    public string Token { get; set; }
 }
 
 public class LoginController : Controller
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _apiBaseUrl;
-    private readonly ILogger<LoginController> _logger; // Add a logger
 
-    // Inject ILogger
-    public LoginController(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<LoginController> logger)
+    public LoginController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
-        _logger = logger;
     }
 
     [HttpGet]
@@ -45,60 +43,56 @@ public class LoginController : Controller
     [HttpPost]
     public async Task<IActionResult> Login(string role, string username, string password)
     {
+        await HttpContext.Session.LoadAsync();
+
         var client = _httpClientFactory.CreateClient();
-        client.BaseAddress = new Uri(_apiBaseUrl);
+        client.BaseAddress = new System.Uri(_apiBaseUrl);
         var loginRequest = new { Role = role, Username = username, Password = password };
+
         var response = await client.PostAsJsonAsync("api/auth/login", loginRequest);
 
         if (response.IsSuccessStatusCode)
         {
             var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>();
-            await SignInUser(loginResponse.Username, loginResponse.Role, loginResponse.UserId);
-            if (loginResponse.Role == "Admin")
+            var token = loginResponse.Token;
+
+            var handler = new JwtSecurityTokenHandler();
+            var decodedToken = handler.ReadJwtToken(token);
+
+            HttpContext.Session.SetString("JWToken", token);
+
+            await SignInUser(decodedToken.Claims);
+
+            // FIX #2: Check the role from the token we just received, not from the old HttpContext.User
+            var roleClaim = decodedToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role);
+            if (roleClaim != null)
             {
-                return RedirectToAction("Dashboard", "Admin");
-            }
-            else if (loginResponse.Role == "Driver")
-            {
-                return RedirectToAction("Index", "Driver");
+                if (roleClaim.Value == "Admin")
+                {
+                    return RedirectToAction("Dashboard", "Admin");
+                }
+                else if (roleClaim.Value == "Driver")
+                {
+                    return RedirectToAction("Index", "Driver");
+                }
             }
         }
 
-        ViewBag.LoginError = "Invalid credentials. Please try again.";
+        ViewBag.LoginError = "Invalid credentials or role.";
         return View("Index");
     }
 
     public async Task<IActionResult> Logout()
     {
+        HttpContext.Session.Remove("JWToken");
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction("Index", "Login");
     }
 
-    private async Task SignInUser(string username, string role, int userId)
+    private async Task SignInUser(IEnumerable<Claim> claims)
     {
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.Name, username),
-            new Claim(ClaimTypes.Role, role)
-        };
-
-        if (role == "Driver")
-        {
-            claims.Add(new Claim("DriverId", userId.ToString()));
-        }
-
         var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-        // --- TEMPORARY DEBUG LOGGING ---
-        _logger.LogWarning("--- Attempting to sign in user: {Username} ---", username);
-        foreach (var claim in claimsPrincipal.Claims)
-        {
-            _logger.LogWarning(" > Claim Added: Type = {Type}, Value = {Value}", claim.Type, claim.Value);
-        }
-
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, claimsPrincipal);
-
-        _logger.LogWarning("--- SignInAsync completed. User.Identity.IsAuthenticated: {IsAuth} ---", HttpContext.User.Identity.IsAuthenticated);
     }
 }
