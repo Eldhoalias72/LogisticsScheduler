@@ -7,6 +7,8 @@ using System.Net.Http.Json;
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
 
 namespace LogisticsScheduler.Web.Controllers
 {
@@ -22,16 +24,22 @@ namespace LogisticsScheduler.Web.Controllers
             _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        private HttpClient GetClient()
+        // FIX #1: Replace the old GetClient() with this helper method
+        private HttpClient GetAuthenticatedClient()
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(_apiBaseUrl);
+            var token = HttpContext.Session.GetString("JWToken");
+            if (!string.IsNullOrEmpty(token))
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
             return client;
         }
 
         public async Task<IActionResult> Schedule(DateTime? date)
         {
-            var client = GetClient();
+            var client = GetAuthenticatedClient(); // Use the authenticated client
             string requestUri = "api/jobs";
 
             if (date.HasValue)
@@ -56,7 +64,7 @@ namespace LogisticsScheduler.Web.Controllers
         [HttpGet]
         public async Task<IActionResult> Assign()
         {
-            var client = GetClient();
+            var client = GetAuthenticatedClient(); // Use the authenticated client
             var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
 
             ViewBag.Drivers = driversResponse.IsSuccessStatusCode
@@ -72,7 +80,7 @@ namespace LogisticsScheduler.Web.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var clientForRepopulate = GetClient();
+                var clientForRepopulate = GetAuthenticatedClient(); // Use the authenticated client
                 var driversResponseForRepopulate = await clientForRepopulate.GetAsync("api/drivers?isAvailable=true");
                 ViewBag.Drivers = driversResponseForRepopulate.IsSuccessStatusCode
                     ? await driversResponseForRepopulate.Content.ReadFromJsonAsync<List<Driver>>()
@@ -80,7 +88,6 @@ namespace LogisticsScheduler.Web.Controllers
                 return View(job);
             }
 
-            // Create the DTO that the API expects, now including the new fields
             var jobCreateDto = new
             {
                 DriverId = job.DriverId == 0 ? (int?)null : job.DriverId,
@@ -94,7 +101,7 @@ namespace LogisticsScheduler.Web.Controllers
                 job.CustomerNumber
             };
 
-            var client = GetClient();
+            var client = GetAuthenticatedClient(); // Use the authenticated client
             var response = await client.PostAsJsonAsync("api/jobs", jobCreateDto);
 
             if (response.IsSuccessStatusCode)
@@ -116,7 +123,7 @@ namespace LogisticsScheduler.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AutoAssign(int jobId)
         {
-            var client = GetClient();
+            var client = GetAuthenticatedClient(); // Use the authenticated client
             var response = await client.PostAsync($"api/jobs/{jobId}/auto-assign", null);
 
             if (!response.IsSuccessStatusCode)
@@ -131,7 +138,7 @@ namespace LogisticsScheduler.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Reassign(int jobId, int driverId)
         {
-            var client = GetClient();
+            var client = GetAuthenticatedClient(); // Use the authenticated client
             var response = await client.PutAsync($"api/jobs/{jobId}/reassign/{driverId}", null);
 
             if (!response.IsSuccessStatusCode)

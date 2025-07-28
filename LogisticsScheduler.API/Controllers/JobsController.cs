@@ -1,11 +1,13 @@
 ﻿using LogisticsScheduler.API.DTOs;
 using LogisticsScheduler.Data;
 using LogisticsScheduler.Data.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace LogisticsScheduler.API.Controllers
 {
+    [Authorize(Roles = "Admin")]
     [ApiController]
     [Route("api/[controller]")]
     public class JobsController : ControllerBase

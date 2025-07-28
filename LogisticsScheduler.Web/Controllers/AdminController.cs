@@ -5,13 +5,14 @@ using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Net.Http.Json;
-using LogisticsScheduler.Data.Models; 
+using LogisticsScheduler.Data.Models;
+using System.Net.Http.Headers; 
+using Microsoft.AspNetCore.Http; 
 public class DashboardStatsDto
 {
     public int TotalDrivers { get; set; }
     public int ActiveJobs { get; set; }
 }
-
 
 namespace LogisticsScheduler.Web.Controllers
 {
@@ -21,18 +22,29 @@ namespace LogisticsScheduler.Web.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _apiBaseUrl;
 
-        // The constructor is now clean and only has the dependencies it needs.
         public AdminController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
             _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        public async Task<IActionResult> Dashboard()
+        //  method to create a client with the JWT attached
+        private HttpClient GetAuthenticatedClient()
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(_apiBaseUrl);
+            var token = HttpContext.Session.GetString("JWToken");
+            if (!string.IsNullOrEmpty(token))
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+            return client;
+        }
 
+        public async Task<IActionResult> Dashboard()
+        {
+            //  Use the authenticated client for the API call
+            var client = GetAuthenticatedClient();
             var response = await client.GetAsync("api/dashboard/stats");
 
             if (response.IsSuccessStatusCode)
@@ -45,6 +57,7 @@ namespace LogisticsScheduler.Web.Controllers
             {
                 ViewBag.TotalDrivers = "N/A";
                 ViewBag.ActiveJobs = "N/A";
+                TempData["ErrorMessage"] = "Could not load dashboard stats. Please try again later.";
             }
 
             return View();
@@ -57,7 +70,7 @@ namespace LogisticsScheduler.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AddDriver(Driver driver, string Password) // Assuming the view sends these two
+        public async Task<IActionResult> AddDriver(Driver driver, string Password)
         {
             if (string.IsNullOrWhiteSpace(Password))
             {
@@ -65,9 +78,9 @@ namespace LogisticsScheduler.Web.Controllers
                 return View(driver);
             }
 
-            var client = _httpClientFactory.CreateClient();
+            // Use the authenticated client for the API call
+            var client = GetAuthenticatedClient();
 
-            // Create the DTO to send to the API, including the raw password
             var driverDto = new
             {
                 driver.Name,
@@ -75,10 +88,10 @@ namespace LogisticsScheduler.Web.Controllers
                 driver.IsAvailable,
                 driver.VehicleCapacity,
                 driver.Username,
-                Password 
+                Password
             };
 
-            var response = await client.PostAsJsonAsync($"{_apiBaseUrl}/api/drivers", driverDto);
+            var response = await client.PostAsJsonAsync($"api/drivers", driverDto);
 
             if (response.IsSuccessStatusCode)
             {
@@ -86,7 +99,7 @@ namespace LogisticsScheduler.Web.Controllers
                 return RedirectToAction("Dashboard");
             }
 
-            var errorResponse = await response.Content.ReadFromJsonAsync<object>();
+            var errorResponse = await response.Content.ReadAsStringAsync();
             ModelState.AddModelError(string.Empty, $"Failed to add driver: {errorResponse}");
             return View(driver);
         }

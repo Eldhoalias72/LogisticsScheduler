@@ -7,6 +7,8 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
+using System.Net.Http.Headers; // Add this using
+using Microsoft.AspNetCore.Http; // Add this using
 
 namespace LogisticsScheduler.Web.Controllers
 {
@@ -16,17 +18,22 @@ namespace LogisticsScheduler.Web.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _apiBaseUrl;
 
-        // REFACTORED: Inject IHttpClientFactory, not AppDbContext
         public DriverController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
             _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        private HttpClient GetClient()
+        // FIX #1: Replace the old GetClient() with this helper method
+        private HttpClient GetAuthenticatedClient()
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new System.Uri(_apiBaseUrl);
+            var token = HttpContext.Session.GetString("JWToken");
+            if (!string.IsNullOrEmpty(token))
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
             return client;
         }
 
@@ -38,7 +45,8 @@ namespace LogisticsScheduler.Web.Controllers
                 return Unauthorized();
             }
 
-            var client = GetClient();
+            // FIX #2: Use the authenticated client
+            var client = GetAuthenticatedClient();
             var response = await client.GetAsync($"api/drivers/{driverId}/jobs");
 
             var jobs = new List<Job>();
@@ -62,9 +70,9 @@ namespace LogisticsScheduler.Web.Controllers
             var driverIdClaim = User.Claims.FirstOrDefault(c => c.Type == "DriverId");
             if (driverIdClaim == null) return Unauthorized();
 
-            var client = GetClient();
+            // FIX #3: Use the authenticated client
+            var client = GetAuthenticatedClient();
 
-            // The API endpoint for this is in JobsController, which is correct.
             var response = await client.PutAsJsonAsync($"api/jobs/{jobId}/status", status);
 
             if (!response.IsSuccessStatusCode)

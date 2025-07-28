@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
 
 namespace LogisticsScheduler.Web.Controllers
 {
@@ -16,26 +18,35 @@ namespace LogisticsScheduler.Web.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _apiBaseUrl;
 
-        // REFACTORED: Inject IHttpClientFactory, not AppDbContext
         public ReportsController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
             _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        public async Task<IActionResult> Index()
+        // FIX #1: Add the helper method to create a client with the JWT attached
+        private HttpClient GetAuthenticatedClient()
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(_apiBaseUrl);
+            var token = HttpContext.Session.GetString("JWToken");
+            if (!string.IsNullOrEmpty(token))
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+            return client;
+        }
 
+        public async Task<IActionResult> Index()
+        {
+            // FIX #2: Use the authenticated client for the API call
+            var client = GetAuthenticatedClient();
             var report = new List<DriverReportViewModel>();
 
-            // Call the new API endpoint
             var response = await client.GetAsync("api/reports/driver-performance");
 
             if (response.IsSuccessStatusCode)
             {
-                // Deserialize directly into the ViewModel, as the structure matches the DTO
                 report = await response.Content.ReadFromJsonAsync<List<DriverReportViewModel>>();
             }
             else

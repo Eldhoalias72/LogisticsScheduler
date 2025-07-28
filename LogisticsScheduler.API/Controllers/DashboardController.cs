@@ -1,5 +1,6 @@
 ﻿using LogisticsScheduler.API.DTOs;
 using LogisticsScheduler.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace LogisticsScheduler.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class DashboardController : ControllerBase
@@ -19,6 +21,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpGet("stats")]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<DashboardStatsDto>> GetStats()
         {
             var stats = new DashboardStatsDto

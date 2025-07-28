@@ -4,9 +4,11 @@ using LogisticsScheduler.Data.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BCrypt.Net;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LogisticsScheduler.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class DriversController : ControllerBase
@@ -20,6 +22,7 @@ namespace LogisticsScheduler.API.Controllers
 
         // CORRECTED: This single method handles both "api/drivers" and "api/drivers?isAvailable=true"
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<IEnumerable<Driver>>> GetDrivers([FromQuery] bool? isAvailable)
         {
             var query = _context.Drivers.AsQueryable();
@@ -33,6 +36,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Authorize(Roles = "Driver")]
         public async Task<ActionResult<Driver>> GetDriverById(int id)
         {
             var driver = await _context.Drivers.FindAsync(id);
@@ -43,6 +47,7 @@ namespace LogisticsScheduler.API.Controllers
 
         // NEW: Endpoint to get all jobs assigned to a specific driver
         [HttpGet("{driverId}/jobs")]
+        [Authorize(Roles = "Driver")]
         public async Task<ActionResult<IEnumerable<Job>>> GetJobsForDriver(int driverId)
         {
             var driverExists = await _context.Drivers.AnyAsync(d => d.DriverId == driverId);
@@ -62,6 +67,7 @@ namespace LogisticsScheduler.API.Controllers
         // In your existing DriversController.cs
 
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<Driver>> CreateDriver(DriverCreateDto dto)
         {
             if (await _context.Drivers.AnyAsync(d => d.Username == dto.Username))
@@ -86,6 +92,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> UpdateDriver(int id, Driver driver)
         {
             if (id != driver.DriverId)
@@ -98,6 +105,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteDriver(int id)
         {
             var driver = await _context.Drivers.FindAsync(id);
