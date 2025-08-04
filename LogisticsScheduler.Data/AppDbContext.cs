@@ -32,6 +32,16 @@ namespace LogisticsScheduler.Data
                 .HasOne(f => f.Job)
                 .WithOne(j => j.Feedback)
                 .HasForeignKey<Feedback>(f => f.JobId);
+
+            modelBuilder.Entity<Admin>().HasData(
+                new Admin
+                {
+                    AdminId = 2, 
+                    Username = "admin0",
+                  
+                    PasswordHash = "$2a$12$xaYILAxGiT.fMakP1yDKne1YwY2dzH0wkJUxcIQtRUCcd4sR8kKDm"
+                }
+);
         }
     }
 }
