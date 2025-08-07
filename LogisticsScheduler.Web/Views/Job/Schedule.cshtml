@@ -1,4 +1,5 @@
-﻿@model List<LogisticsScheduler.Data.Models.Job>
+﻿@* The model is now the original Job model, as you requested *@
+@model List<LogisticsScheduler.Data.Models.Job>
 @{
     ViewBag.Title = "Scheduled Jobs";
     DateTime? selectedDate = ViewBag.SelectedDate as DateTime?;
@@ -41,7 +42,7 @@
     <h5 class="mb-3">All Scheduled Jobs</h5>
     <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th>Job ID</th>
                     <th>Address</th>
@@ -71,10 +72,18 @@
                         <td>
                             @if (job.DriverId == null)
                             {
-                                <form method="post" asp-action="AutoAssign" class="d-inline">
+                                <form method="post" class="d-flex gap-2 assign-form">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="jobId" value="@job.JobId" />
-                                    <button type="submit" class="btn btn-warning btn-sm">Auto-Assign</button>
+                                    <select name="driverId" class="form-select form-select-sm w-auto assignment-select" required>
+                                        <option value="" disabled selected>Choose...</option>
+                                        <option value="auto">Auto-Assign</option>
+                                        @foreach (var driver in drivers.Where(d => d.IsAvailable))
+                                        {
+                                            <option value="@driver.DriverId">@driver.Name</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="btn btn-success btn-sm">Assign</button>
                                 </form>
                             }
                             else
@@ -98,3 +107,27 @@
         </table>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const forms = document.querySelectorAll('.assign-form');
+
+            forms.forEach(form => {
+                const select = form.querySelector('.assignment-select');
+
+                form.addEventListener('submit', function (e) {
+                    const selectedValue = select.value;
+
+                    if (selectedValue === 'auto') {
+                        form.action = '@Url.Action("AutoAssign", "Job")';
+                        select.name = 'ignore';
+                    } else {
+                        form.action = '@Url.Action("Reassign", "Job")';
+                        select.name = 'driverId';
+                    }
+                });
+            });
+        });
+    </script>
+}

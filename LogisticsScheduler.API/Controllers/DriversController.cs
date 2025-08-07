@@ -1,4 +1,5 @@
 ﻿using LogisticsScheduler.API.DTOs;
+using LogisticsScheduler.API.Services; // Added
 using LogisticsScheduler.Data;
 using LogisticsScheduler.Data.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -14,13 +15,17 @@ namespace LogisticsScheduler.API.Controllers
     public class DriversController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ICacheService _cacheService; // Added
+        private const string DashboardCacheKey = "dashboard_stats"; // Added
 
-        public DriversController(AppDbContext context)
+        // Modified constructor to inject the cache service
+        public DriversController(AppDbContext context, ICacheService cacheService)
         {
             _context = context;
+            _cacheService = cacheService; // Added
         }
 
-        // CORRECTED: This single method handles both "api/drivers" and "api/drivers?isAvailable=true"
+        // GET methods do not change data, so no changes are needed here.
         [HttpGet]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<IEnumerable<Driver>>> GetDrivers([FromQuery] bool? isAvailable)
@@ -45,7 +50,6 @@ namespace LogisticsScheduler.API.Controllers
             return driver;
         }
 
-        // NEW: Endpoint to get all jobs assigned to a specific driver
         [HttpGet("{driverId}/jobs")]
         [Authorize(Roles = "Driver")]
         public async Task<ActionResult<IEnumerable<Job>>> GetJobsForDriver(int driverId)
@@ -63,8 +67,6 @@ namespace LogisticsScheduler.API.Controllers
 
             return Ok(jobs);
         }
-
-        // In your existing DriversController.cs
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
@@ -88,6 +90,9 @@ namespace LogisticsScheduler.API.Controllers
             _context.Drivers.Add(driver);
             await _context.SaveChangesAsync();
 
+            // Invalidate the cache because a new driver was added
+            await _cacheService.RemoveData(DashboardCacheKey);
+
             return CreatedAtAction(nameof(GetDriverById), new { id = driver.DriverId }, new { driver.DriverId, driver.Name });
         }
 
@@ -100,6 +105,8 @@ namespace LogisticsScheduler.API.Controllers
 
             _context.Entry(driver).State = EntityState.Modified;
             await _context.SaveChangesAsync();
+
+
 
             return NoContent();
         }
@@ -114,6 +121,9 @@ namespace LogisticsScheduler.API.Controllers
 
             _context.Drivers.Remove(driver);
             await _context.SaveChangesAsync();
+
+            // Invalidate the cache because a driver was removed
+            await _cacheService.RemoveData(DashboardCacheKey);
 
             return NoContent();
         }

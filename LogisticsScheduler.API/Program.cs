@@ -4,14 +4,25 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
+using StackExchange.Redis; // <-- ADD THIS
+using LogisticsScheduler.API.Services; // <-- ADD THIS
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Add services to the container ---
 
+// ADD REDIS CACHE SERVICE
+// The IConnectionMultiplexer should be a singleton
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
+// Add our custom cache service
+builder.Services.AddScoped<ICacheService, RedisCacheService>();
+
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// (The rest of your existing services remain here...)
 // 1. Add and Configure JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -27,6 +38,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
     });
+
 
 builder.Services.AddAuthorization();
 

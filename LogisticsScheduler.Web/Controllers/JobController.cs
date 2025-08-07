@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
+using System.Linq; // Add this using statement
 
 namespace LogisticsScheduler.Web.Controllers
 {
@@ -24,7 +25,6 @@ namespace LogisticsScheduler.Web.Controllers
             _apiBaseUrl = configuration.GetValue<string>("ApiBaseUrl");
         }
 
-        // FIX #1: Replace the old GetClient() with this helper method
         private HttpClient GetAuthenticatedClient()
         {
             var client = _httpClientFactory.CreateClient();
@@ -37,22 +37,26 @@ namespace LogisticsScheduler.Web.Controllers
             return client;
         }
 
+        // MODIFIED: This action is the key to the fix
         public async Task<IActionResult> Schedule(DateTime? date)
         {
-            var client = GetAuthenticatedClient(); // Use the authenticated client
-            string requestUri = "api/jobs";
+            var client = GetAuthenticatedClient();
 
+            // Build the request URI without any cache-busting parameters
+            string requestUri = "api/jobs";
             if (date.HasValue)
             {
                 requestUri += $"?date={date.Value:yyyy-MM-dd}";
                 ViewBag.SelectedDate = date.Value;
             }
 
+            // This request will now hit the Redis cache on the API if the data is available
             var jobsResponse = await client.GetAsync(requestUri);
             var jobs = jobsResponse.IsSuccessStatusCode
                 ? await jobsResponse.Content.ReadFromJsonAsync<List<Job>>()
                 : new List<Job>();
 
+            // The rest of the method remains the same
             var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
             ViewBag.Drivers = driversResponse.IsSuccessStatusCode
                 ? await driversResponse.Content.ReadFromJsonAsync<List<Driver>>()
@@ -61,10 +65,13 @@ namespace LogisticsScheduler.Web.Controllers
             return View(jobs);
         }
 
+
+        // No changes are needed in the methods below, as they all redirect to the now-fixed Schedule action.
+
         [HttpGet]
         public async Task<IActionResult> Assign()
         {
-            var client = GetAuthenticatedClient(); // Use the authenticated client
+            var client = GetAuthenticatedClient();
             var driversResponse = await client.GetAsync("api/drivers?isAvailable=true");
 
             ViewBag.Drivers = driversResponse.IsSuccessStatusCode
@@ -80,7 +87,8 @@ namespace LogisticsScheduler.Web.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var clientForRepopulate = GetAuthenticatedClient(); // Use the authenticated client
+                // Repopulate drivers on validation failure
+                var clientForRepopulate = GetAuthenticatedClient();
                 var driversResponseForRepopulate = await clientForRepopulate.GetAsync("api/drivers?isAvailable=true");
                 ViewBag.Drivers = driversResponseForRepopulate.IsSuccessStatusCode
                     ? await driversResponseForRepopulate.Content.ReadFromJsonAsync<List<Driver>>()
@@ -101,7 +109,7 @@ namespace LogisticsScheduler.Web.Controllers
                 job.CustomerNumber
             };
 
-            var client = GetAuthenticatedClient(); // Use the authenticated client
+            var client = GetAuthenticatedClient();
             var response = await client.PostAsJsonAsync("api/jobs", jobCreateDto);
 
             if (response.IsSuccessStatusCode)
@@ -123,7 +131,7 @@ namespace LogisticsScheduler.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AutoAssign(int jobId)
         {
-            var client = GetAuthenticatedClient(); // Use the authenticated client
+            var client = GetAuthenticatedClient();
             var response = await client.PostAsync($"api/jobs/{jobId}/auto-assign", null);
 
             if (!response.IsSuccessStatusCode)
@@ -138,14 +146,13 @@ namespace LogisticsScheduler.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Reassign(int jobId, int driverId)
         {
-            var client = GetAuthenticatedClient(); // Use the authenticated client
+            var client = GetAuthenticatedClient();
             var response = await client.PutAsync($"api/jobs/{jobId}/reassign/{driverId}", null);
 
             if (!response.IsSuccessStatusCode)
             {
                 TempData["ErrorMessage"] = "Failed to reassign job.";
             }
-
             return RedirectToAction("Schedule");
         }
     }
