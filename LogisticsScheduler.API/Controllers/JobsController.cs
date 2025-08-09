@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogisticsScheduler.API.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class JobsController : ControllerBase
@@ -25,8 +25,9 @@ namespace LogisticsScheduler.API.Controllers
 
         // MODIFIED: This is the corrected GET method
         // In LogisticsScheduler.API/Controllers/JobsController.cs
-
+        
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<IEnumerable<JobDto>>> GetJobs([FromQuery] DateTime? date)
         {
             var cacheKey = date.HasValue ? $"jobs:{date.Value:yyyy-MM-dd}" : "jobs:all";
@@ -75,6 +76,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<Job>> GetJobById(int id)
         {
             var cacheKey = $"job:{id}";
@@ -100,6 +102,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<Job>> CreateJob(JobCreateDto dto)
         {
             var job = new Job
@@ -124,6 +127,7 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpPost("{id}/auto-assign")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> AutoAssignJob(int id, [FromServices] IConfiguration config, [FromServices] ILogger<JobsController> logger)
         {
             logger.LogInformation("Starting auto-assign for job {JobId}", id);
@@ -203,6 +207,7 @@ namespace LogisticsScheduler.API.Controllers
 
 
         [HttpPut("{jobId}/reassign/{driverId}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ReassignJob(int jobId, int driverId)
         {
             var job = await _context.Jobs.FindAsync(jobId);
@@ -220,30 +225,75 @@ namespace LogisticsScheduler.API.Controllers
 
             return NoContent();
         }
+        public class JobStatusUpdateDto
+        {
+            public string Status { get; set; }
+        }
+        private readonly IEmailService _emailService;
 
         [HttpPut("{id}/status")]
-        public async Task<IActionResult> UpdateJobStatus(int id, [FromBody] string status)
-        {
-            var job = await _context.Jobs.FindAsync(id);
-            if (job == null) return NotFound();
-
-            job.Status = status;
-            var statusLog = new JobStatus
+        [Authorize(Roles = "Admin,Driver")]
+        public async Task<IActionResult> UpdateJobStatus(
+        int id,
+        [FromBody] JobStatusUpdateDto dto,
+        [FromServices] ILogger<JobsController> logger,
+        [FromServices] IEmailService emailService)
             {
-                JobId = job.JobId,
-                Status = status,
-                TimeStamp = DateTime.UtcNow
-            };
+                logger.LogInformation("Received request to update status for JobId {JobId}", id);
 
-            _context.JobStatuses.Add(statusLog);
-            await _context.SaveChangesAsync();
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Status))
+                    return BadRequest("Status is required");
 
-            await InvalidateJobCaches(job);
+                var job = await _context.Jobs.FindAsync(id);
+                if (job == null)
+                    return NotFound();
+
+                logger.LogInformation("Updating job {JobId} from {OldStatus} to {NewStatus}", job.JobId, job.Status, dto.Status);
+                job.Status = dto.Status;
+
+                var statusLog = new JobStatus
+                {
+                    JobId = job.JobId,
+                    Status = dto.Status,
+                    TimeStamp = DateTime.UtcNow
+                };
+
+                _context.JobStatuses.Add(statusLog);
+                await _context.SaveChangesAsync();
+                await InvalidateJobCaches(job);
+
+                // ✅ Send feedback email if delivered
+                if (dto.Status.Equals("Delivered", StringComparison.OrdinalIgnoreCase))
+                {
+                    var feedbackLink = $"https://localhost:7166/feedback/submit?jobId={job.JobId}";
+                    var htmlContent = $@"
+                <p>Dear {job.CustomerName},</p>
+                <p>Your order has been delivered successfully.</p>
+                <p>Please help us improve by providing your feedback:</p>
+                <p><a href='{feedbackLink}'>Submit Feedback</a></p>
+                <p>Thank you for using Logistics Scheduler!</p>
+            ";
+
+                try
+                {
+                    await emailService.SendEmailAsync(job.CustomerEmail, "Delivery Completed - Feedback Request", htmlContent);
+                    logger.LogInformation("Feedback email sent to {Email}", job.CustomerEmail);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to send feedback email to {Email}", job.CustomerEmail);
+                }
+            }
 
             return NoContent();
         }
 
+
+
+
+
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteJob(int id)
         {
             var job = await _context.Jobs.FindAsync(id);

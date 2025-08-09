@@ -73,7 +73,11 @@ namespace LogisticsScheduler.Web.Controllers
             // FIX #3: Use the authenticated client
             var client = GetAuthenticatedClient();
 
-            var response = await client.PutAsJsonAsync($"api/jobs/{jobId}/status", status);
+            var response = await client.PutAsJsonAsync(
+                   $"api/jobs/{jobId}/status",
+                   new { Status = status }
+               );
+
 
             if (!response.IsSuccessStatusCode)
             {
