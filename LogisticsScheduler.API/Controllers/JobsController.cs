@@ -124,33 +124,83 @@ namespace LogisticsScheduler.API.Controllers
         }
 
         [HttpPost("{id}/auto-assign")]
-        public async Task<IActionResult> AutoAssignJob(int id)
+        public async Task<IActionResult> AutoAssignJob(int id, [FromServices] IConfiguration config, [FromServices] ILogger<JobsController> logger)
         {
-            var job = await _context.Jobs.FindAsync(id);
-            if (job == null) return NotFound("Job not found.");
-            if (job.DriverId.HasValue) return BadRequest("Job is already assigned.");
+            logger.LogInformation("Starting auto-assign for job {JobId}", id);
 
-            var suitableDriver = await _context.Drivers
+            var job = await _context.Jobs.FindAsync(id);
+            if (job == null)
+            {
+                logger.LogWarning("Job {JobId} not found", id);
+                return NotFound("Job not found.");
+            }
+
+            if (job.DriverId.HasValue)
+            {
+                logger.LogWarning("Job {JobId} already assigned to driver {DriverId}", id, job.DriverId);
+                return BadRequest("Job is already assigned.");
+            }
+
+            var apiKey = config["Geoapify:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                logger.LogError("Geoapify API key is missing");
+                return StatusCode(500, "Geoapify API key is missing in configuration.");
+            }
+
+            var availableDrivers = await _context.Drivers
                 .Where(d => d.IsAvailable)
-                .OrderBy(d => CalculateDistance(d.Location, job.DeliveryAddress))
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            logger.LogInformation("Found {Count} available drivers", availableDrivers.Count);
+
+            if (!availableDrivers.Any())
+                return NotFound("No suitable drivers available.");
+
+            // Geocode pickup location once
+            var pickupCoords = await GeocodeAddressAsync(job.PickupAddress, apiKey);
+            logger.LogInformation("Pickup address: {PickupAddress}, coords: {Coords}", job.PickupAddress, pickupCoords);
+
+            var tasks = availableDrivers.Select(async driver =>
+            {
+                logger.LogInformation("Processing driver {DriverId} - {DriverName} at {Location}", driver.DriverId, driver.Name, driver.Location);
+
+                var driverCoords = await GeocodeAddressAsync(driver.Location, apiKey);
+                logger.LogInformation("Driver {DriverId} coords: {Coords}", driver.DriverId, driverCoords);
+
+                var distance = await CalculateDistanceAsync(driverCoords, pickupCoords, apiKey);
+                logger.LogInformation("Distance from driver {DriverId} to pickup: {Distance} meters", driver.DriverId, distance);
+
+                return (Driver: driver, Distance: distance);
+            });
+
+            var driverDistances = await Task.WhenAll(tasks);
+
+            var suitableDriver = driverDistances
+                .Where(x => x.Distance < double.MaxValue)
+                .OrderBy(x => x.Distance)
+                .FirstOrDefault().Driver;
 
             if (suitableDriver != null)
             {
+                logger.LogInformation("Assigning driver {DriverId} to job {JobId}", suitableDriver.DriverId, job.JobId);
+
                 job.DriverId = suitableDriver.DriverId;
                 job.Status = "Assigned";
                 _context.Update(job);
                 await _context.SaveChangesAsync();
-
                 await InvalidateJobCaches(job);
-
                 await _context.Entry(job).Reference(j => j.Driver).LoadAsync();
+
+                logger.LogInformation("Job {JobId} successfully assigned", job.JobId);
 
                 return Ok(job);
             }
 
+            logger.LogWarning("No suitable drivers found after distance calculation");
             return NotFound("No suitable drivers available.");
         }
+
 
         [HttpPut("{jobId}/reassign/{driverId}")]
         public async Task<IActionResult> ReassignJob(int jobId, int driverId)
@@ -219,13 +269,53 @@ namespace LogisticsScheduler.API.Controllers
             await Task.WhenAll(tasks);
         }
 
-        private double CalculateDistance(string? origin, string? destination)
+        private async Task<double> CalculateDistanceAsync((double Lat, double Lon)? originCoords, (double Lat, double Lon)? destCoords, string apiKey)
         {
-            if (string.IsNullOrEmpty(origin) || string.IsNullOrEmpty(destination))
+            if (originCoords == null || destCoords == null)
             {
+                // No valid coordinates — skip routing
                 return double.MaxValue;
             }
-            return new Random().NextDouble() * 10;
+
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var url = $"https://api.geoapify.com/v1/routing?waypoints={originCoords.Value.Lat},{originCoords.Value.Lon}|{destCoords.Value.Lat},{destCoords.Value.Lon}&mode=drive&apiKey={apiKey}";
+
+            var response = await httpClient.GetAsync(url);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // Log error but don't crash
+                var error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Geoapify routing failed: {error}");
+                return double.MaxValue;
+            }
+
+            var routeData = await response.Content.ReadFromJsonAsync<DTOs.GeoapifyRouteResponse>();
+            return routeData?.features?.FirstOrDefault()?.properties?.distance ?? double.MaxValue;
         }
+
+
+        private async Task<(double Lat, double Lon)?> GeocodeAddressAsync(string address, string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(address)) return null;
+
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) }; // fail fast
+            var url = $"https://api.geoapify.com/v1/geocode/search?text={Uri.EscapeDataString(address)}&apiKey={apiKey}";
+            var response = await httpClient.GetFromJsonAsync<DTOs.GeoapifyGeocodeResponse>(url);
+
+            var first = response?.features?.FirstOrDefault();
+            if (first == null || first.geometry?.coordinates == null || first.geometry.coordinates.Count < 2)
+            {
+                Console.WriteLine($"Geocoding failed for address: {address}");
+                return null;
+            }
+
+
+            return (first.geometry.coordinates[1], first.geometry.coordinates[0]);
+        }
+
+
+
+
     }
 }
