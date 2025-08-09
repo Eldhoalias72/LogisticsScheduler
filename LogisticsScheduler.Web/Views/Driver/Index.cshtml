@@ -3,10 +3,27 @@
     ViewBag.Title = "Driver Dashboard";
     var driverId = ViewBag.DriverId;
 
+    // Normalize and categorize job statuses
+    Func<string, string> categorizeStatus = status =>
+    {
+        if (string.IsNullOrWhiteSpace(status)) return "Pending";
+
+        var s = status.Trim().ToLower();
+        if (s.Contains("delivered") || s.Contains("completed"))
+            return "Completed";
+        if (s.Contains("in progress") || s.Contains("in transit") || s.Contains("picked up"))
+            return "In Progress";
+        if (s.Contains("pending") || s.Contains("assigned") || s.Contains("scheduled"))
+            return "Pending";
+
+        // Default fallback
+        return "Other";
+    };
+
     int totalJobs = Model.Count;
-    int completedJobs = Model.Count(j => j.Status == "Completed");
-    int inProgressJobs = Model.Count(j => j.Status == "In Progress");
-    int pendingJobs = Model.Count(j => j.Status == "Pending");
+    int completedJobs = Model.Count(j => categorizeStatus(j.Status) == "Completed");
+    int inProgressJobs = Model.Count(j => categorizeStatus(j.Status) == "In Progress");
+    int pendingJobs = Model.Count(j => categorizeStatus(j.Status) == "Pending");
 }
 
 <div class="container mt-4">
@@ -27,7 +44,6 @@
             }
         </div>
     </div>
-
 
     <div class="row g-3 mb-4">
         <div class="col-md-3">
@@ -75,22 +91,23 @@
                 <tbody>
                     @foreach (var job in Model)
                     {
+                        var displayCategory = categorizeStatus(job.Status);
                         <tr>
                             <td><strong>@job.JobId</strong></td>
                             <td><i class="bi bi-geo-alt-fill text-primary me-1"></i>@job.DeliveryAddress</td>
                             <td><i class="bi bi-clock me-1"></i>@job.ScheduledTime</td>
                             <td>
-                                @if (job.Status == "Pending")
+                                @if (displayCategory == "Pending")
                                 {
-                                    <span class="badge bg-secondary">Pending</span>
+                                    <span class="badge bg-secondary">@displayCategory</span>
                                 }
-                                else if (job.Status == "In Progress")
+                                else if (displayCategory == "In Progress")
                                 {
-                                    <span class="badge bg-primary">In Progress</span>
+                                    <span class="badge bg-primary">@displayCategory</span>
                                 }
-                                else if (job.Status == "Completed")
+                                else if (displayCategory == "Completed")
                                 {
-                                    <span class="badge bg-success">Completed</span>
+                                    <span class="badge bg-success">@displayCategory</span>
                                 }
                                 else
                                 {
